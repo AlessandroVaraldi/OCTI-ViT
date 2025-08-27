@@ -381,19 +381,31 @@ def main() -> None:
                 g = get_init(
                     TENSORS,
                     keys=(f"layers.{l}.{ln_alias}.weight",
-                          f"layers.{l}.{ln_alias}.gamma",
-                          f"layers.{l}.{ln_alias}.g",
-                          f"layers.{l}.norm{1 if ln_alias=='ln1' else 2}.weight"),
-                    debug_all=init_keys
-                ).astype(np.float32)
+                        f"layers.{l}.{ln_alias}.gamma",
+                        f"layers.{l}.{ln_alias}.g",
+                        f"layers.{l}.norm{1 if ln_alias=='ln1' else 2}.weight"),
+                    required=False, debug_all=init_keys
+                )
+                if g is None:
+                    g = np.ones(int(cfg["DMODEL"]), dtype=np.float32)
+                    print(f"[LayerNorm] missing {ln_alias}.gamma at layer {l} → assumed fused; using ones.")
+                else:
+                    g = g.astype(np.float32)
+
                 b = get_init(
                     TENSORS,
                     keys=(f"layers.{l}.{ln_alias}.bias",
-                          f"layers.{l}.{ln_alias}.beta",
-                          f"layers.{l}.{ln_alias}.b",
-                          f"layers.{l}.norm{1 if ln_alias=='ln1' else 2}.bias"),
-                    debug_all=init_keys
-                ).astype(np.float32)
+                        f"layers.{l}.{ln_alias}.beta",
+                        f"layers.{l}.{ln_alias}.b",
+                        f"layers.{l}.norm{1 if ln_alias=='ln1' else 2}.bias"),
+                    required=False, debug_all=init_keys
+                )
+                if b is None:
+                    b = np.zeros(int(cfg["DMODEL"]), dtype=np.float32)
+                    print(f"[LayerNorm] missing {ln_alias}.beta at layer {l} → assumed fused; using zeros.")
+                else:
+                    b = b.astype(np.float32)
+
                 to_i32 = lambda x: np.round(x * 32768).clip(-32768, 32767).astype(np.int32)
                 w_ofs[f"G_{tag}_L{l}"] = write_array(wfh, to_i32(g))
                 w_ofs[f"B_{tag}_L{l}"] = write_array(wfh, to_i32(b))
