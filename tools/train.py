@@ -340,9 +340,7 @@ if __name__ == "__main__":
 
     # Esempi:
     # PRETRAIN:
-    # python3 train.py --stage pretrain --imagenet /data/imagenet/ --webdataset /data/imagenet-shards/ --bs 512 --epochs 200 --workers 4 --compile
+    # python3 tools/train.py --stage pretrain --imagenet /data/dataset/pytorch_only/imagenet/ --webdataset /data/dataset/pytorch_only/imagenet-shards/ --bs 512 --epochs 200 --train_eval_batches 20 --workers 4 --compile
     #
     # FINETUNE (fullres + LLRD + mix-decay + SWA + TTA):
-    # python3 train.py --stage finetune --data ./cifar-100-python --resume checkpoints/best.pth \
-    #   --bs 512 --epochs 200 --compile --ft_fullres --ft_llrd 0.8 --ft_head_lr_mul 5 \
-    #   --ft_use_cutmix --ft_mix_decay --ft_swa --ft_swa_epochs 20 --ft_tta
+    # python3 tools/train.py --stage finetune --data ./cifar-100-python --resume checkpoints/training0.pth --bs 512 --epochs 200 --compile --ft_fullres --ft_llrd 0.8 --ft_head_lr_mul 5 --ft_use_cutmix --ft_mix_decay --ft_swa --ft_swa_epochs 20 --ft_tta

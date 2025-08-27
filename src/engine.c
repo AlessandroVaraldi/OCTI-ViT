@@ -30,6 +30,7 @@ static qint8_t *tmp_ffn;              /* DFF × TOKENS workspace     */
 static const qint8_t  *PE_W    = PTR_I8 (OFF_W_PE);
 static const qint32_t *PE_B    = PTR_I32(OFF_B_PE);
 static const qint8_t  *CLS_EMB = PTR_I8 (OFF_CLS_EMB);
+static const qint8_t  *POS_EMB = PTR_I8 (OFF_POS_EMB);
 
 static const qint8_t  *HEAD_W  = PTR_I8 (OFF_HEAD_W);
 static const qint32_t *HEAD_B  = PTR_I32(OFF_HEAD_B);
@@ -120,17 +121,29 @@ static inline void layernorm_tokens(qint8_t *x, const qint32_t *gamma, const qin
     for (size_t t = 0; t < TOKENS; ++t) layernorm_int8(x + t * DMODEL, gamma, beta, DMODEL, EPS_SHIFT);
 }
 
-static void patch_embed(const qint8_t *inp_patches)
+/* Scrive i patch-token a partire da t=1 e riserva t=0 per [CLS] */
+void patch_embed(const qint8_t *inp_patches)
 {
+    /* Output a partire da bufA + DMODEL → i patch vanno in [1..PATCHES] */
     matmul_int8(inp_patches,
                 PE_W, PE_B,
-                bufA,
+                bufA + DMODEL,
                 PATCHES,           /* M */
                 DMODEL,            /* N */
                 PATCH_DIM,         /* K */
                 SC_PE_q15);
 
-    memcpy(bufA + PATCHES * DMODEL, CLS_EMB, DMODEL);
+    /* Copia [CLS] in testa (t=0) */
+    memcpy(bufA, CLS_EMB, DMODEL);
+}
+
+/* Somma APE per-token (saturazione int8) */
+static inline void add_pos_emb(qint8_t *tokens)
+{
+    const size_t len = (size_t)TOKENS * (size_t)DMODEL;
+    for (size_t i = 0; i < len; ++i) {
+        tokens[i] = sat8((int32_t)tokens[i] + (int32_t)POS_EMB[i]);
+    }
 }
 
 /* ============================================================= */
@@ -215,6 +228,7 @@ void vit_forward(const qint8_t *inp_patches,
                  qint8_t       *logits_out)
 {
     patch_embed(inp_patches);
+    add_pos_emb(bufA);
 
     qint8_t *cur  = bufA;
     qint8_t *next = bufB;
@@ -224,7 +238,7 @@ void vit_forward(const qint8_t *inp_patches,
         qint8_t *tmp = cur; cur = next; next = tmp;
     }
 
-    const qint8_t *cls_tok = cur + (TOKENS - 1) * DMODEL;
+    const qint8_t *cls_tok = cur;
 
     matmul_int8(cls_tok, HEAD_W, HEAD_B, logits_out, 1, OUT_DIM, DMODEL, SC_HEAD_q15);
 }
