@@ -1,0 +1,11 @@
+build/
+backup/
+checkpoints/
+cifar-100-python/
+data/
+images/
+
+__pycache__/
+*.pyc
+
+*.jpg
