@@ -110,14 +110,13 @@ def train(args):
     # ------------------------- Freeze backbone ------------------
     def set_backbone_trainable(flag: bool):
         for n, p in net.named_parameters():
-            if n.startswith("head."):  # la head resta sempre allenabile
+            if n.startswith("head."):
                 continue
             p.requires_grad = flag
 
     try:
         step = 0
         for epoch in range(1, args.epochs + 1):
-            # gestione freeze solo nel finetune
             if args.stage == "finetune" and args.ft_freeze_backbone_epochs > 0:
                 if epoch == 1:
                     set_backbone_trainable(False)
@@ -130,7 +129,7 @@ def train(args):
             tot_samples = 0.0
             train_correct_soft = 0.0
 
-            # scheduling MixUp/CutMix (solo FT se richiesto)
+            # scheduling MixUp/CutMix
             if args.stage == "finetune" and args.ft_mix_decay:
                 alpha_ep = lin_decay(args.mixup_alpha, 0.0, epoch - 1, args.epochs - 1)
                 prob_ep  = lin_decay(args.mix_prob,     0.0, epoch - 1, args.epochs - 1)
@@ -158,9 +157,8 @@ def train(args):
                 scaler.step(opt)
                 scaler.update()
 
-                # EMA aggiorna dal backbone "net"
                 ema.update_parameters(net)
-                # SWA (solo FT): media dei pesi del backbone
+
                 if swa_model is not None and epoch >= swa_start:
                     swa_model.update_parameters(net)
 
@@ -171,7 +169,6 @@ def train(args):
                 loss_sum += loss.item() * B
                 tot_samples += B
                 pred = logits.argmax(1)
-                # accuracy "soft" per mix: pesiamo la correttezza con lam
                 correct_soft = (lam * (pred == y1).float() + (1 - lam) * (pred == y2).float()).sum().item()
                 train_correct_soft += correct_soft
 
@@ -182,7 +179,6 @@ def train(args):
             if args.train_eval_batches > 0:
                 train_acc_nomix = eval_on_loader(ema, ld_train, device, max_batches=args.train_eval_batches, tta=False)
 
-            # validazione su EMA; opzionale TTA solo in finetune
             val_tta = (args.stage == "finetune" and args.ft_tta)
             val_acc = eval_on_loader(ema, ld_val, device, max_batches=None, tta=val_tta)
 
@@ -319,28 +315,26 @@ if __name__ == "__main__":
     p.add_argument("--grad_clip", type=float, default=1.0)
 
     # ---------------- finetune-only upgrades ----------------
-    p.add_argument("--ft_fullres", action="store_true", help="In finetune usa la stessa risoluzione/patch del pretrain (non forzare 32/4)")
-    p.add_argument("--ft_llrd", type=float, default=0.8, help="Layer-wise LR decay (1.0=off)")
-    p.add_argument("--ft_head_lr_mul", type=float, default=5.0, help="Moltiplicatore LR per la head in finetune")
-    p.add_argument("--ft_freeze_backbone_epochs", type=int, default=0, help="Congela il backbone per N epoche all'inizio del finetune")
-    p.add_argument("--ft_use_cutmix", action="store_true", help="Alterna anche CutMix (oltre a MixUp) in finetune")
-    p.add_argument("--ft_mix_decay", action="store_true", help="Decadimento lineare di prob/alpha di MixUp/CutMix verso 0 a fine finetune")
-    p.add_argument("--ft_swa", action="store_true", help="Usa SWA nelle ultime epoche del finetune")
-    p.add_argument("--ft_swa_epochs", type=int, default=20, help="Numero di epoche finali da mediare in SWA")
-    p.add_argument("--ft_tta", action="store_true", help="Usa HFlip TTA in validazione nel finetune")
+    p.add_argument("--ft_fullres", action="store_true", help="In finetune, use the same resolution/patch size as pretrain (do not force 32/4)")
+    p.add_argument("--ft_llrd", type=float, default=0.8, help="Layer-wise learning rate decay (1.0=off)")
+    p.add_argument("--ft_head_lr_mul", type=float, default=5.0, help="Learning rate multiplier for the head during finetune")
+    p.add_argument("--ft_freeze_backbone_epochs", type=int, default=0, help="Freeze the backbone for N epochs at the beginning of finetune")
+    p.add_argument("--ft_use_cutmix", action="store_true", help="Also alternate CutMix (in addition to MixUp) during finetune")
+    p.add_argument("--ft_mix_decay", action="store_true", help="Linear decay of MixUp/CutMix prob/alpha towards 0 at the end of finetune")
+    p.add_argument("--ft_swa", action="store_true", help="Use SWA in the last epochs of finetune")
+    p.add_argument("--ft_swa_epochs", type=int, default=20, help="Number of final epochs to average in SWA")
+    p.add_argument("--ft_tta", action="store_true", help="Use HFlip TTA during validation in finetune")
 
     args = p.parse_args()
 
-    # default 32/4 solo se finetune e non si richiede fullres
     if args.stage == "finetune" and not args.ft_fullres:
         args.img_size, args.patch = 32, 4
 
     Path(args.data).mkdir(parents=True, exist_ok=True)
     train(args)
 
-    # Esempi:
     # PRETRAIN:
     # python3 tools/train.py --stage pretrain --imagenet /data/dataset/pytorch_only/imagenet/ --webdataset /data/dataset/pytorch_only/imagenet-shards/ --bs 512 --epochs 200 --train_eval_batches 20 --workers 4 --compile
     #
     # FINETUNE (fullres + LLRD + mix-decay + SWA + TTA):
-    # python3 tools/train.py --stage finetune --data ./cifar-100-python --resume checkpoints/training0.pth --bs 512 --epochs 200 --compile --ft_fullres --ft_llrd 0.8 --ft_head_lr_mul 5 --ft_use_cutmix --ft_mix_decay --ft_swa --ft_swa_epochs 20 --ft_tta
+    # python3 tools/train.py --stage finetune --data ./cifar-100-python --resume checkpoints/pretrain250827.pth --bs 512 --epochs 100 --ema 0.99 --compile --ft_fullres --ft_llrd 0.8 --ft_head_lr_mul 5 --ft_use_cutmix --ft_mix_decay --ft_swa --ft_swa_epochs 20 --ft_tta
