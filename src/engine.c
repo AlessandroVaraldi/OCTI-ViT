@@ -104,9 +104,9 @@ static const int16_t SC_QKV_q15[LAYERS]  = {
     SC_QKV_L0,  SC_QKV_L1,  SC_QKV_L2,  SC_QKV_L3,
     SC_QKV_L4,  SC_QKV_L5,  SC_QKV_L6,  SC_QKV_L7 };
 
-static const int16_t SC_MHAO_q15[LAYERS] = {
-    SC_MHAO_L0, SC_MHAO_L1, SC_MHAO_L2, SC_MHAO_L3,
-    SC_MHAO_L4, SC_MHAO_L5, SC_MHAO_L6, SC_MHAO_L7 };
+static const int16_t SC_MHA_O_q15[LAYERS] = {
+    SC_MHA_O_L0, SC_MHA_O_L1, SC_MHA_O_L2, SC_MHA_O_L3,
+    SC_MHA_O_L4, SC_MHA_O_L5, SC_MHA_O_L6, SC_MHA_O_L7 };
 
 static const int16_t SC_FFN1_q15[LAYERS] = {
     SC_FFN1_L0, SC_FFN1_L1, SC_FFN1_L2, SC_FFN1_L3,
@@ -176,7 +176,7 @@ static void transformer_block(size_t l, qint8_t *inp, qint8_t *out)
 
     mha_int8(q_buf, k_buf, v_buf, out, TOKENS, HEADS, SC_QKV_q15[l]);
 
-    matmul_int8(out, Wo, Bo, tmp_ffn, TOKENS, DMODEL, DMODEL, SC_MHAO_q15[l]);
+    matmul_int8(out, Wo, Bo, tmp_ffn, TOKENS, DMODEL, DMODEL, SC_MHA_O_q15[l]);
     memcpy(out, tmp_ffn, TOKENS * DMODEL);
 
     for (size_t i = 0; i < vec_sz; ++i) out[i] = sat8((int32_t)skip1[i] + out[i]);
